@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>UCP Horizon Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --navy:   #004878;
+      --green:  #4caf50;
+      --green2: #388e3c;
+      --border: #dde3ee;
+      --bg:     #f4f6fa;
+      --white:  #ffffff;
+      --text:   #1a2744;
+      --muted:  #7a8299;
+      --red:    #e53935;
+      --yellow: #f59e0b;
+      --purple: #7c3aed;
+      --teal:   #0891b2;
+      --radius: 8px;
+      --shadow: 0 2px 12px rgba(26,39,68,0.10);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      width:390px; min-height:500px; max-height:640px;
+      overflow-y:auto; font-family:'Inter',sans-serif; font-size:13px;
+      background:var(--bg); color:var(--text);
+    }
+    body::-webkit-scrollbar { width:4px; }
+    body::-webkit-scrollbar-thumb { background:#c5cde0; border-radius:4px; }
+
+    /* Header */
+    .header {
+      background:var(--navy); padding:14px 16px 12px;
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+    }
+    .header-brand { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+    .header-actions { display:flex; align-items:center; gap:6px; }
+    .logo-box { width:36px; height:36px; background:var(--green); border-radius:8px;
+      display:flex; align-items:center; justify-content:center; font-size:18px; }
+    .brand-name { font-weight:700; font-size:14px; color:#fff; }
+    .brand-sub  { font-size:10px; color:#8fa3c8; margin-top:1px; }
+
+    .scan-btn {
+      background:var(--green); border:none; color:#fff; padding:6px 13px;
+      border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;
+      font-family:'Inter',sans-serif; transition:background .2s; white-space:nowrap;
+    }
+    .scan-btn:hover { background:var(--green2); }
+    .scan-btn.scanning { opacity:.65; pointer-events:none; animation:pulse 1s infinite; }
+
+    .scan-all-btn {
+      background:#2563eb; border:none; color:#fff; padding:6px 10px;
+      border-radius:6px; font-size:11px; font-weight:600; cursor:pointer;
+      font-family:'Inter',sans-serif; transition:background .2s;
+      display:none; align-items:center; gap:4px; white-space:nowrap;
+    }
+    .scan-all-btn:hover { background:#1d4ed8; }
+    .scan-all-btn.scanning { opacity:.65; pointer-events:none; animation:pulse 1s infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:.65} 50%{opacity:.35} }
+
+    /* Status bar */
+    .status {
+      background:#eef1f8; border-bottom:1px solid var(--border);
+      padding:6px 16px; display:flex; align-items:center; gap:7px;
+      font-size:11px; color:var(--muted);
+    }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--green);
+           animation:blink 2.5s infinite; flex-shrink:0; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    /* Summary cards */
+    .cards { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px 14px 4px; }
+    .card {
+      background:var(--white); border:1.5px solid var(--border);
+      border-radius:var(--radius); padding:11px 12px;
+      display:flex; align-items:center; gap:10px;
+      cursor:pointer; transition:border-color .2s, opacity .2s;
+      box-shadow:var(--shadow);
+    }
+    .card:hover  { border-color:var(--navy); }
+    .card.active { border-color:var(--green); background:#f0fff0; }
+    .card.all-read { opacity:.55; }  /* dimmed when all items are read */
+    .card-icon { width:36px; height:36px; border-radius:8px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:17px; flex-shrink:0; }
+    .ci-ann { background:#fff8e1; }
+    .ci-out { background:#e0f2fe; }
+    .ci-mat { background:#e3f2fd; }
+    .ci-sub { background:#e8f5e9; }
+    .ci-grd { background:#f3e5f5; }
+    .card-num { font-size:24px; font-weight:700; color:var(--navy); line-height:1; }
+    .card-lbl { font-size:10px; font-weight:500; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.5px; margin-top:2px; }
+
+    /* Pills */
+    .pills { display:flex; gap:5px; padding:10px 14px 2px; overflow-x:auto; }
+    .pills::-webkit-scrollbar { display:none; }
+    .pill {
+      padding:4px 11px; border-radius:20px; border:1.5px solid var(--border);
+      background:transparent; color:var(--muted); font-size:11px; font-weight:500;
+      cursor:pointer; white-space:nowrap; font-family:'Inter',sans-serif; transition:all .15s;
+    }
+    .pill.active,.pill:hover { background:var(--navy); border-color:var(--navy); color:#fff; }
+
+    /* List header with read controls */
+    .list-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 14px 4px; border-top:1px solid var(--border); margin-top:6px;
+      flex-wrap:wrap; gap:4px;
+    }
+    .list-title { font-size:10px; font-weight:700; text-transform:uppercase;
+      letter-spacing:1px; color:var(--muted); }
+    .list-actions { display:flex; align-items:center; gap:6px; }
+    .toggle-read-btn {
+      font-size:10px; color:var(--teal); background:none; border:1.5px solid var(--teal);
+      cursor:pointer; font-family:'Inter',sans-serif; padding:2px 7px;
+      border-radius:4px; transition:all .15s; font-weight:600;
+    }
+    .toggle-read-btn:hover { background:var(--teal); color:#fff; }
+    .mark-all-btn {
+      font-size:10px; color:var(--muted); background:none; border:none;
+      cursor:pointer; font-family:'Inter',sans-serif; padding:2px 6px;
+      border-radius:4px; transition:color .2s;
+    }
+    .mark-all-btn:hover { color:var(--green2); }
+    .clear-btn {
+      font-size:10px; color:var(--muted); background:none; border:none;
+      cursor:pointer; font-family:'Inter',sans-serif; padding:2px 6px;
+      border-radius:4px; transition:color .2s;
+    }
+    .clear-btn:hover { color:var(--red); }
+
+    /* List items */
+    .list { padding:0 14px 12px; }
+    .item {
+      background:var(--white); border:1.5px solid var(--border);
+      border-radius:7px; padding:9px 11px 9px 13px; margin-bottom:6px;
+      border-left:4px solid transparent;
+      box-shadow:0 1px 4px rgba(26,39,68,.06);
+      transition:opacity .2s;
+    }
+    .item.ann { border-left-color:var(--yellow); }
+    .item.mat { border-left-color:var(--teal);   }
+    .item.sub { border-left-color:var(--green);  }
+    .item.grd { border-left-color:var(--purple); }
+    .item.item-read { opacity:.55; }
+
+    .item-course {
+      font-size:10px; font-weight:600; color:var(--muted);
+      text-transform:uppercase; letter-spacing:.5px; margin-bottom:2px;
+      display:flex; align-items:center; gap:5px;
+    }
+    .item-title  { font-size:12px; font-weight:500; color:var(--navy); line-height:1.45; }
+    .item-meta   { font-size:10px; color:var(--muted); margin-top:3px; }
+
+    /* Unread dot */
+    .unread-dot {
+      width:7px; height:7px; border-radius:50%; background:#e53935;
+      flex-shrink:0; display:inline-block;
+    }
+
+    /* Announcement expand */
+    .ann-actions { margin-top:6px; }
+    .ann-view-btn {
+      font-size:10px; font-family:'Inter',sans-serif; padding:3px 9px; border-radius:4px;
+      border:1.5px solid var(--yellow); background:transparent; color:#b45309;
+      cursor:pointer; font-weight:600; transition:all .15s;
+    }
+    .ann-view-btn:hover,.ann-view-btn.active { background:var(--yellow); color:#fff; }
+    .ann-desc-box {
+      margin-top:7px; background:#fffbeb; border:1px solid #fde68a;
+      border-radius:5px; padding:8px 10px;
+    }
+    .ann-desc-text { font-size:11px; color:var(--text); line-height:1.6;
+      white-space:pre-wrap; word-break:break-word; }
+    .ann-attach-link {
+      display:inline-block; margin-top:6px; font-size:10px; color:var(--teal);
+      font-weight:600; text-decoration:none;
+    }
+    .ann-attach-link:hover { text-decoration:underline; }
+
+    /* Material download button */
+    .mat-actions { margin-top:5px; }
+    .mat-download-btn {
+      display:inline-flex; align-items:center; gap:4px;
+      font-size:10px; font-weight:600; color:#0891b2;
+      background:#e0f2fe; padding:3px 9px; border-radius:4px;
+      text-decoration:none; transition:background .15s;
+    }
+    .mat-download-btn:hover { background:#bae6fd; }
+
+    /* Scan All progress */
+    .scan-all-progress { background:var(--white); border:1.5px solid var(--border);
+      border-radius:8px; padding:18px 14px; text-align:center; }
+    .sap-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:12px; }
+    .sap-bar-wrap { background:var(--border); border-radius:20px; height:7px;
+      overflow:hidden; margin-bottom:10px; }
+    .sap-bar { height:100%; background:#2563eb; border-radius:20px; transition:width .5s ease; }
+    .sap-info  { font-size:11px; color:var(--navy); font-weight:500; margin-bottom:3px; }
+    .sap-count { font-size:10px; color:var(--muted); }
+
+    /* Scan All summary */
+    .scan-all-summary { background:var(--white); border:1.5px solid var(--border);
+      border-radius:8px; overflow:hidden; margin-bottom:6px; }
+    .sas-header { display:flex; align-items:center; justify-content:space-between;
+      padding:9px 12px; background:#1e3a8a; color:#fff; font-size:11px; font-weight:600; }
+    .sas-dismiss { background:rgba(255,255,255,.15); border:none; color:#fff;
+      font-size:10px; font-family:'Inter',sans-serif; padding:3px 8px;
+      border-radius:4px; cursor:pointer; }
+    .sas-dismiss:hover { background:rgba(255,255,255,.28); }
+    .sum-row { display:flex; align-items:center; justify-content:space-between;
+      padding:7px 12px; border-bottom:1px solid var(--border); font-size:11px; }
+    .sum-row:last-child { border-bottom:none; }
+    .sum-row.has-updates { background:#f0f9ff; }
+    .sum-name { font-weight:500; color:var(--navy); flex:1; padding-right:8px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sum-badges { display:flex; gap:4px; flex-shrink:0; }
+    .sum-badge { font-size:9px; font-weight:700; padding:2px 6px;
+      border-radius:10px; color:#fff; white-space:nowrap; }
+    .sum-badge.ann { background:#d97706; }
+    .sum-badge.out { background:#0891b2; }
+    .sum-badge.mat { background:var(--teal); }
+    .sum-badge.sub { background:var(--green2); }
+    .sum-badge.grd { background:var(--purple); }
+    .sum-none { font-size:10px; color:var(--muted); }
+
+    .empty { text-align:center; padding:28px 20px; color:var(--muted); }
+    .empty-icon { font-size:34px; margin-bottom:8px; }
+    .empty-text { font-size:12px; font-weight:500; }
+    .empty-sub  { font-size:10px; margin-top:4px; line-height:1.6; }
+
+    .spinner { width:26px; height:26px; border:2px solid var(--border);
+      border-top-color:var(--green); border-radius:50%;
+      animation:spin .75s linear infinite; margin:0 auto 10px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .footer { border-top:1px solid var(--border); padding:6px 14px;
+      font-size:10px; color:var(--muted); text-align:center; }
+
+    /* Settings */
+    .settings-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px; border-top: 1px solid var(--border);
+      cursor: pointer; user-select: none;
+    }
+    .settings-toggle:hover { background: #f0f2f8; }
+    .settings-toggle-label {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .5px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .settings-toggle-icon {
+      font-size: 12px; color: var(--muted); transition: transform .2s;
+    }
+    .settings-panel {
+      border-top: 1px solid var(--border);
+      background: var(--white);
+      display: none;
+      padding: 4px 0 8px;
+    }
+    .settings-panel.open { display: block; }
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 14px; gap: 12px;
+    }
+    .setting-row + .setting-row { border-top: 1px solid var(--border); }
+    .setting-label { font-size: 12px; font-weight: 500; color: var(--text); }
+    .setting-desc  { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+    /* Toggle switch */
+    .hz-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .hz-switch input { opacity: 0; width: 0; height: 0; }
+    .hz-slider {
+      position: absolute; inset: 0;
+      background: #ced4da; border-radius: 20px;
+      cursor: pointer; transition: background .2s;
+    }
+    .hz-slider::before {
+      content: ""; position: absolute;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #fff; top: 3px; left: 3px;
+      transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .hz-switch input:checked + .hz-slider { background: #004878; }
+    .hz-switch input:checked + .hz-slider::before { transform: translateX(16px); }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-brand">
+      <div class="logo-box">🎓</div>
+      <div>
+        <div class="brand-name">Horizon Assistant</div>
+        <div class="brand-sub">University of Central Punjab</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="scan-all-btn" id="scanAllBtn">
+        🔍 <span class="scan-all-label">Scan All</span>
+      </button>
+      <button class="scan-btn" id="scanBtn">↻ Scan Now</button>
+    </div>
+  </div>
+
+  <div class="status">
+    <div class="dot"></div>
+    <span id="statusText">Monitoring active</span>
+  </div>
+
+  <div class="cards">
+    <div class="card" id="card-ann" data-filter="ann">
+      <div class="card-icon ci-ann">📢</div>
+      <div class="card-info">
+        <div class="card-num" id="cnt-ann">0</div>
+        <div class="card-lbl">Announcements</div>
+      </div>
+    </div>
+    <div class="card" id="card-out" data-filter="out">
+      <div class="card-icon ci-out">🗂</div>
+      <div class="card-info">
+        <div class="card-num" id="cnt-out">0</div>
+        <div class="card-lbl">Course Outline</div>
+      </div>
+    </div>
+    <div class="card" id="card-mat" data-filter="mat">
+      <div class="card-icon ci-mat">📁</div>
+      <div class="card-info">
+        <div class="card-num" id="cnt-mat">0</div>
+        <div class="card-lbl">Materials</div>
+      </div>
+    </div>
+    <div class="card" id="card-sub" data-filter="sub">
+      <div class="card-icon ci-sub">📝</div>
+      <div class="card-info">
+        <div class="card-num" id="cnt-sub">0</div>
+        <div class="card-lbl">Submissions</div>
+      </div>
+    </div>
+    <div class="card" id="card-grd" data-filter="grd">
+      <div class="card-icon ci-grd">🎓</div>
+      <div class="card-info">
+        <div class="card-num" id="cnt-grd">0</div>
+        <div class="card-lbl">Grade Updates</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pills">
+    <button class="pill active" data-filter="all">All</button>
+    <button class="pill" data-filter="ann">Announcements</button>
+    <button class="pill" data-filter="out">Outline</button>
+    <button class="pill" data-filter="mat">Materials</button>
+    <button class="pill" data-filter="sub">Submissions</button>
+    <button class="pill" data-filter="grd">Grades</button>
+  </div>
+
+  <div class="list-header">
+    <span class="list-title" id="listTitle">Recent Updates</span>
+    <div class="list-actions">
+      <button class="toggle-read-btn" id="toggleReadBtn">📋 Show All</button>
+      <button class="mark-all-btn"   id="markAllReadBtn">✓ Mark all read</button>
+      <button class="clear-btn"      id="clearBtn">🗑 Clear</button>
+    </div>
+  </div>
+
+  <div class="list" id="list">
+    <div style="text-align:center;padding:36px 20px;color:var(--muted)">
+      <div class="spinner"></div>
+      Loading updates…
+    </div>
+  </div>
+
+  <div class="footer" id="footer">Last scan: —</div>
+
+  <!-- Settings -->
+  <div class="settings-toggle" id="settingsToggle">
+    <span class="settings-toggle-label">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 1.41 14.14M15.54 8.46a5 5 0 0 1 .7 7.07M8.46 15.54a5 5 0 0 1-7.07-.7M4.93 4.93a10 10 0 0 0-1.41 14.14"/></svg>
+      Settings
+    </span>
+    <span class="settings-toggle-icon" id="settingsArrow">▾</span>
+  </div>
+  <div class="settings-panel" id="settingsPanel">
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Auto scan on login</div>
+        <div class="setting-desc">Automatically scan all courses when you open the portal dashboard</div>
+      </div>
+      <label class="hz-switch">
+        <input type="checkbox" id="autoScanToggle" checked>
+        <span class="hz-slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
