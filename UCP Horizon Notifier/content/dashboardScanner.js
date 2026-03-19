@@ -919,7 +919,7 @@
 
     const TABS = [
       {key:"all",label:"All",    u:tabU.all},
-      {key:"ann",label:"News",   u:tabU.ann},
+      {key:"ann",label:"Announcement",   u:tabU.ann},
       {key:"mat",label:"Material",u:tabU.mat},
       {key:"sub",label:"Submission",u:tabU.sub},
       {key:"grd",label:"Grade",  u:tabU.grd},
