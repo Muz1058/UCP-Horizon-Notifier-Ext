@@ -1097,8 +1097,12 @@
         typeBadge("out",d.out,"Out","#e0f2fe","#075985"),
       ].filter(Boolean).join("");
 
-      const cid = "hz-c-"+btoa(unescape(encodeURIComponent(name))).replace(/[^a-z0-9]/gi,"").slice(0,10);
-
+      
+      const cid = "hz-c-" + (function(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(36);
+})(name);
       return `
         <div class="hz-cs${allRead?" all-read":""}">
           <button class="hz-ctoggle" data-target="${cid}" data-course="${esc(name)}">
