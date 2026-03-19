@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "UCP Horizon Notifier",
+  "version": "4.1.0",
+  "description": "Monitors your UCP Horizon student portal for new announcements, materials, submissions, and grade updates.",
+  "permissions": [
+    "storage",
+    "notifications",
+    "tabs",
+    "scripting",
+    "alarms",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://horizon.ucp.edu.pk/*"
+  ],
+  "background": {
+    "service_worker": "background/notificationEngine.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://horizon.ucp.edu.pk/*"
+      ],
+      "js": [
+        "content/common.js",
+        "content/debug.js",
+        "content/readTracker.js",
+        "content/courseProxy.js",
+        "content/courseTabBadges.js",
+        "content/announcementScanner.js",
+        "content/outlineScanner.js",
+        "content/materialScanner.js",
+        "content/submissionScanner.js",
+        "content/gradeScanner.js",
+        "content/dashboardScanner.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/*"
+      ],
+      "matches": [
+        "https://horizon.ucp.edu.pk/*"
+      ]
+    }
+  ]
+}
