@@ -128,23 +128,16 @@
 
     // Update individual item unread dots and dim state based on fresh read IDs
     // (items marked read from another tab need their dots removed)
-
     if (!_panelShowAll) {
-  panel.querySelectorAll(".hz-item[data-item-id]").forEach(el => {
-    const id   = el.dataset.itemId;
-    const isNowRead = id && !!rd[id];
-    if (isNowRead) {
-      el.querySelector(".hz-udot")?.remove();
-      // Don't dim if the detail box is currently open
-      const detailBtn = el.querySelector(".hz-dbtn");
-      const isDetailOpen = detailBtn && detailBtn.classList.contains("open");
-      if (!isDetailOpen) {
-        el.classList.add("dim");
-      }
-    }
-  });
-} 
-    else {
+      panel.querySelectorAll(".hz-item[data-item-id]").forEach(el => {
+        const id   = el.dataset.itemId;
+        const isNowRead = id && !!rd[id];
+        if (isNowRead) {
+          el.querySelector(".hz-udot")?.remove();
+          el.classList.add("dim");
+        }
+      });
+    } else {
       panel.querySelectorAll(".hz-item[data-item-id]").forEach(el => {
         const id = el.dataset.itemId;
         if (id && !!rd[id]) el.querySelector(".hz-udot")?.remove();
@@ -819,6 +812,21 @@
     btn.addEventListener("click", togglePanel);
     document.body.appendChild(btn);
   }
+
+  function _updateToggleArrow(panelOpen) {
+    const btn  = document.getElementById("hz-toggle-arrow");
+    const icon = document.getElementById("hz-arrow-icon");
+    if (!btn || !icon) return;
+    if (panelOpen) {
+      // Panel open - arrow points right (to close), arrow sits at panel left edge
+      btn.style.right = "380px";
+      icon.style.transform = "rotate(180deg)";
+    } else {
+      // Panel closed - arrow points left (to open), sits at screen right edge
+      btn.style.right = "0";
+      icon.style.transform = "rotate(0deg)";
+    }
+  }
   function _updateToggleArrow(panelOpen) {
   const btn  = document.getElementById("hz-toggle-arrow");
   const icon = document.getElementById("hz-arrow-icon");
@@ -1120,7 +1128,6 @@
   function renderItem(type, x, rd) {
     const isRead  = !!rd[x.id];
     const dimCls  = (isRead && !_panelShowAll) ? " dim" : "";
-    
     const colors  = {ann:"#ffc107",out:"#0891b2",mat:"#0d6efd",sub:"#198754",grd:"#6f42c1"};
     const labels  = {ann:"Announcement",out:"Outline",mat:"Material",sub:"Submission",grd:"Grade"};
     // SVG icons - no emojis
@@ -1285,60 +1292,30 @@
     });
 
     // Announcement detail toggle
-    // panel.querySelectorAll(".hz-dbtn").forEach(btn => {
-    //   btn.onclick = () => {
-    //     const box     = document.getElementById(btn.dataset.iid);
-    //     if (!box) return;
-    //     const opening = box.style.display==="none" || !box.style.display;
-    //     box.style.display = opening?"block":"none";
-    //     btn.textContent   = opening?"Hide":"View Details";
-    //     btn.classList.toggle("open", opening);
+    panel.querySelectorAll(".hz-dbtn").forEach(btn => {
+      btn.onclick = () => {
+        const box     = document.getElementById(btn.dataset.iid);
+        if (!box) return;
+        const opening = box.style.display==="none" || !box.style.display;
+        box.style.display = opening?"block":"none";
+        btn.textContent   = opening?"Hide":"View Details";
+        btn.classList.toggle("open", opening);
 
-    //     const id = btn.dataset.itemid;
-    //     if (!id) return;
+        const id = btn.dataset.itemid;
+        if (!id) return;
 
-    //     if (opening && !rd[id]) {
-    //       // Mark read on open - remove dot
-    //       rd[id] = true;
-    //       markReadIds([id]);
-    //       btn.closest(".hz-item")?.querySelector(".hz-udot")?.remove();
-    //     }
-    //     if (!opening && rd[id] && !_panelShowAll) {
-    //       // Dim on Hide (user is done reading)
-    //       btn.closest(".hz-item")?.classList.add("dim");
-    //     }
-    //   };
-    // });
-    // Announcement detail toggle
-panel.querySelectorAll(".hz-dbtn").forEach(btn => {
-  btn.onclick = () => {
-    const box     = document.getElementById(btn.dataset.iid);
-    if (!box) return;
-    const opening = box.style.display==="none" || !box.style.display;
-    box.style.display = opening ? "block" : "none";
-    btn.textContent   = opening ? "Hide" : "View Details";
-    btn.classList.toggle("open", opening);
-
-    const id = btn.dataset.itemid;
-    if (!id) return;
-
-    if (opening && !rd[id]) {
-      rd[id] = true;
-      markReadIds([id]);
-      btn.closest(".hz-item")?.querySelector(".hz-udot")?.remove();
-    }
-
-    if (opening) {
-      // Always remove dim while detail box is open (covers already-read items too)
-      btn.closest(".hz-item")?.classList.remove("dim");
-    }
-
-    if (!opening && rd[id] && !_panelShowAll) {
-      // Re-dim only when user closes
-      btn.closest(".hz-item")?.classList.add("dim");
-    }
-  };
-});
+        if (opening && !rd[id]) {
+          // Mark read on open - remove dot
+          rd[id] = true;
+          markReadIds([id]);
+          btn.closest(".hz-item")?.querySelector(".hz-udot")?.remove();
+        }
+        if (!opening && rd[id] && !_panelShowAll) {
+          // Dim on Hide (user is done reading)
+          btn.closest(".hz-item")?.classList.add("dim");
+        }
+      };
+    });
   }
 
   // -- Storage helpers -------------------------------------------------------
