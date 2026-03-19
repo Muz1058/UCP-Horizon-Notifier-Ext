@@ -1,4 +1,4 @@
-// content/materialScanner.js 
+// content/materialScanner.js Ã¢â‚¬â€ v19
 // Runs on /student/course/material/{id}
 // Single write path: SAVE_UPDATES only
 (function () {
