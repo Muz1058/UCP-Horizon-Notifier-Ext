@@ -419,7 +419,7 @@
           right: 0;
           width: 20px;
           height: 48px;
-          background: #004878;
+          background: #009688;
           color: #fff;
           border: none;
           border-radius: 4px 0 0 4px;
@@ -820,13 +820,29 @@
     if (panelOpen) {
       // Panel open - arrow points right (to close), arrow sits at panel left edge
       btn.style.right = "380px";
-      icon.setAttribute("points", "9 18 15 12 9 6"); // chevron-right
+      icon.style.transform = "rotate(180deg)";
     } else {
       // Panel closed - arrow points left (to open), sits at screen right edge
       btn.style.right = "0";
-      icon.setAttribute("points", "15 18 9 12 15 6"); // chevron-left
+      icon.style.transform = "rotate(0deg)";
     }
   }
+  function _updateToggleArrow(panelOpen) {
+  const btn  = document.getElementById("hz-toggle-arrow");
+  const icon = document.getElementById("hz-arrow-icon");
+  if (!btn || !icon) return;
+
+  const panel = document.getElementById(PANEL_ID);
+  const width = panel?.offsetWidth || 380;
+
+  if (panelOpen) {
+    btn.style.right = `${width}px`;
+    icon.style.transform = "rotate(180deg)";
+  } else {
+    btn.style.right = "0";
+    icon.style.transform = "rotate(0deg)";
+  }
+}
 
   function togglePanel() {
     const existing = document.getElementById(PANEL_ID);
