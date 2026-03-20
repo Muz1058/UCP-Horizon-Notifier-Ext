@@ -50,17 +50,17 @@ function attachListeners() {
     });
   });
 
-  // Toggle open/close
+  // Settings panel toggle open/close
   document.getElementById("settingsToggle").addEventListener("click", () => {
     const panel = document.getElementById("settingsPanel");
     const arrow = document.getElementById("settingsArrow");
     const isOpen = panel.classList.toggle("open");
-    arrow.textContent = isOpen ? "ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â´" : "ÃƒÂ¢Ã¢â‚¬â€œÃ‚Â¾";
+    arrow.textContent = isOpen ? "\u25B4" : "\u25BE";
   });
 
   // Load saved setting (default: true = enabled)
   chrome.storage.local.get("hz_auto_scan_on_login", res => {
-    const enabled = res.hz_auto_scan_on_login !== false; // default true
+    const enabled = res.hz_auto_scan_on_login !== false;
     document.getElementById("autoScanToggle").checked = enabled;
   });
 
@@ -100,7 +100,6 @@ function render() {
   const unreadSub = countUnread(state.submissions   || []);
   const unreadGrd = countUnread(state.grades        || []);
 
-  // Cards show UNREAD count (badge shows total if more exist)
   setCardCount("cnt-ann", unreadAnn, (state.announcements||[]).length);
   setCardCount("cnt-out", unreadOut, (state.outlines     ||[]).length);
   setCardCount("cnt-mat", unreadMat, (state.materials    ||[]).length);
@@ -110,9 +109,9 @@ function render() {
   const footer = document.getElementById("footer");
   if (state.lastScanned) {
     const d = new Date(state.lastScanned);
-    footer.textContent = `Last scan: ${d.toLocaleDateString()} at ${d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}`;
+    footer.textContent = "Last scan: " + d.toLocaleDateString() + " at " + d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
   } else {
-    footer.textContent = "Last scan: --:--";
+    footer.textContent = "Last scan: \u2014";
   }
 
   updateToggleBtn();
@@ -129,7 +128,6 @@ function setCardCount(elemId, unread, total) {
   const el = document.getElementById(elemId);
   if (!el) return;
   el.textContent = unread;
-  // Dim the card if nothing unread
   const card = el.closest(".card");
   if (card) card.classList.toggle("all-read", unread === 0 && total > 0);
 }
@@ -137,11 +135,11 @@ function setCardCount(elemId, unread, total) {
 function updateToggleBtn() {
   const btn = document.getElementById("toggleReadBtn");
   if (!btn) return;
-  btn.textContent = showAllMode ? "🔵 Unread Only" : "📋 Show All";
+  btn.textContent = showAllMode ? "\uD83D\uDD35 Unread Only" : "\uD83D\uDCCB Show All";
   btn.title = showAllMode ? "Switch to unread-only view" : "Show all items including read";
 }
 
-// ── List rendering ────────────────────────────────────────────────────────────
+// List rendering
 function renderList(filter) {
   const container = document.getElementById("list");
   let rows = [];
@@ -151,8 +149,6 @@ function renderList(filter) {
   if (filter === "all" || filter === "sub") (state.submissions  ||[]).forEach(d => rows.push({type:"sub",data:d}));
   if (filter === "all" || filter === "grd") (state.grades       ||[]).forEach(d => rows.push({type:"grd",data:d}));
 
-  // Sort: newest first (most recent scannedAt at top)
-  // Within same timestamp, unread shown before read
   rows.sort((a, b) => {
     const dateDiff = new Date(b.data.scannedAt||0) - new Date(a.data.scannedAt||0);
     if (dateDiff !== 0) return dateDiff;
@@ -161,19 +157,18 @@ function renderList(filter) {
     return aRead === bRead ? 0 : aRead ? 1 : -1;
   });
 
-  // Filter to unread only unless showAllMode
   const visible = showAllMode ? rows : rows.filter(r => !state.readIds[r.data.id]);
 
   if (!visible.length) {
     const isAllRead = rows.length > 0 && !showAllMode;
-    const icons = {all:"✅",ann:"📢",mat:"📁",sub:"📝",grd:"🎓"};
-    container.innerHTML = `<div class="empty">
-      <div class="empty-icon">${isAllRead ? "✅" : icons[filter]||"✨"}</div>
-      <div class="empty-text">${isAllRead ? "All caught up!" : "No updates detected yet"}</div>
-      <div class="empty-sub">${isAllRead
-        ? `All ${rows.length} item${rows.length!==1?"s":""} marked as read. <a href="#" id="showAllLink" style="color:var(--teal)">Show all</a>`
-        : "Open any course on Horizon, then click Scan Now"}</div>
-    </div>`;
+    const icons = {all:"\u2705",ann:"\uD83D\uDCE2",mat:"\uD83D\uDCC1",sub:"\uD83D\uDCDD",grd:"\uD83C\uDF93"};
+    container.innerHTML = '<div class="empty">'
+      + '<div class="empty-icon">' + (isAllRead ? "\u2705" : (icons[filter]||"\u2728")) + '</div>'
+      + '<div class="empty-text">' + (isAllRead ? "All caught up!" : "No updates detected yet") + '</div>'
+      + '<div class="empty-sub">' + (isAllRead
+        ? 'All ' + rows.length + ' item' + (rows.length!==1?"s":"") + ' marked as read. <a href="#" id="showAllLink" style="color:var(--teal)">Show all</a>'
+        : "Open any course on Horizon, then click Scan Now") + '</div>'
+      + '</div>';
     document.getElementById("showAllLink")?.addEventListener("click", e => {
       e.preventDefault();
       showAllMode = true;
@@ -182,16 +177,15 @@ function renderList(filter) {
     });
     return;
   }
- 
+
   container.innerHTML = visible.map(r => itemHTML(r)).join("");
 
-  // Attach view-detail expand for announcements (marks read)
   container.querySelectorAll(".ann-view-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const id     = btn.dataset.id;
-      const rawId  = btn.dataset.rawid;
-      const descBox = document.getElementById(`desc-${id}`);
+      const id      = btn.dataset.id;
+      const rawId   = btn.dataset.rawid;
+      const descBox = document.getElementById("desc-" + id);
       if (!descBox) return;
       const expanded = expandedIds.has(id);
       if (expanded) {
@@ -204,16 +198,13 @@ function renderList(filter) {
         descBox.style.display = "block";
         btn.textContent = "Hide";
         btn.classList.add("active");
-        // Mark as read when user opens the description
         if (rawId) doMarkRead(rawId);
       }
     });
   });
 
-  // Mark non-announcement items as read when popup is open (they're visible)
   const visibleNonAnn = visible.filter(r => r.type !== "ann" && !state.readIds[r.data.id]);
   if (visibleNonAnn.length) {
-    // Small delay so user has actually seen the popup
     setTimeout(() => {
       const ids = visibleNonAnn.map(r => r.data.id);
       doMarkReadBulk(ids);
@@ -226,86 +217,79 @@ function itemHTML({ type, data }) {
   const tabLabel   = data.tabLabel || typeToLabel(type);
   const course     = data.courseName || "";
   const headerLine = course
-    ? `${esc(tabLabel)} <span style="color:var(--muted);font-weight:400">(${esc(course)})</span>`
+    ? esc(tabLabel) + ' <span style="color:var(--muted);font-weight:400">(' + esc(course) + ')</span>'
     : esc(tabLabel);
 
   let title = "", meta = "", extraHTML = "";
 
   if (type === "ann") {
     title = esc(data.subject || "");
-    meta  = data.date ? `📅 ${esc(data.date)}` : "";
+    meta  = data.date ? "\uD83D\uDCC5 " + esc(data.date) : "";
 
-    const desc      = (data.description || "").trim();
-    const hasDesc   = desc.length > 0;
-    const hasAttach = !!data.attachmentLink;
-    const itemId    = esc(data.id || "");
+    const desc       = (data.description || "").trim();
+    const hasDesc    = desc.length > 0;
+    const hasAttach  = !!data.attachmentLink;
+    const itemId     = esc(data.id || "");
     const isExpanded = expandedIds.has(data.id);
 
     if (hasDesc || hasAttach) {
       let descContent = "";
-      if (hasDesc)    descContent += `<div class="ann-desc-text">${esc(desc)}</div>`;
-      const safeAttachmentLink = safePortalUrl(data.attachmentLink);
-      if (safeAttachmentLink)  descContent += `<a class="ann-attach-link" href="${esc(safeAttachmentLink)}" target="_blank" rel="noopener noreferrer">View Attachment</a>`;
-      extraHTML = `
-        <div class="ann-actions">
-          <button class="ann-view-btn${isExpanded?" active":""}" data-id="${itemId}" data-rawid="${itemId}">
-            ${isExpanded ? "Hide" : "View Details"}
-          </button>
-        </div>
-        <div class="ann-desc-box" id="desc-${itemId}" style="display:${isExpanded?"block":"none"}">
-          ${descContent}
-        </div>`;
+      if (hasDesc)   descContent += '<div class="ann-desc-text">' + esc(desc) + '</div>';
+      const safeLink = safePortalUrl(data.attachmentLink);
+      if (safeLink)  descContent += '<a class="ann-attach-link" href="' + esc(safeLink) + '" target="_blank" rel="noopener noreferrer">View Attachment</a>';
+      extraHTML = '<div class="ann-actions">'
+        + '<button class="ann-view-btn' + (isExpanded?" active":"") + '" data-id="' + itemId + '" data-rawid="' + itemId + '">'
+        + (isExpanded ? "Hide" : "View Details")
+        + '</button></div>'
+        + '<div class="ann-desc-box" id="desc-' + itemId + '" style="display:' + (isExpanded?"block":"none") + '">'
+        + descContent + '</div>';
     }
 
   } else if (type === "out") {
     title = esc(data.title || data.fileName || "");
-    meta  = data.weekNo ? `Week ${esc(data.weekNo)}` : "";
+    meta  = data.weekNo ? "Week " + esc(data.weekNo) : "";
     if (!meta && data.description) meta = esc(data.description.slice(0,60));
-    const safeOutlineDownload = safePortalUrl(data.downloadLink);
-    if (safeOutlineDownload) {
-      extraHTML = `<div class="mat-actions">
-        <a class="mat-download-btn" href="${esc(safeOutlineDownload)}" target="_blank" rel="noopener noreferrer" download>Download</a>
-      </div>`;
+    const safeLink = safePortalUrl(data.downloadLink);
+    if (safeLink) {
+      extraHTML = '<div class="mat-actions"><a class="mat-download-btn" href="' + esc(safeLink) + '" target="_blank" rel="noopener noreferrer" download>Download</a></div>';
     }
+
   } else if (type === "mat") {
     title = esc(data.fileName || "");
     meta  = data.description ? esc(data.description.slice(0,60)) : "";
-    const safeMaterialDownload = safePortalUrl(data.downloadLink);
-    if (safeMaterialDownload) {
-      extraHTML = `<div class="mat-actions">
-        <a class="mat-download-btn" href="${esc(safeMaterialDownload)}" target="_blank" rel="noopener noreferrer" download>Download</a>
-      </div>`;
+    const safeLink = safePortalUrl(data.downloadLink);
+    if (safeLink) {
+      extraHTML = '<div class="mat-actions"><a class="mat-download-btn" href="' + esc(safeLink) + '" target="_blank" rel="noopener noreferrer" download>Download</a></div>';
     }
+
   } else if (type === "sub") {
     title = esc(data.name || "");
     meta  = data.startDate && data.dueDate
-      ? `📅 ${esc(data.startDate)} → ${esc(data.dueDate)}`
-      : data.dueDate ? `⏰ Due: ${esc(data.dueDate)}` : "";
+      ? "\uD83D\uDCC5 " + esc(data.startDate) + " \u2192 " + esc(data.dueDate)
+      : data.dueDate ? "\u23F0 Due: " + esc(data.dueDate) : "";
+
   } else if (type === "grd") {
     title = esc(data.assessment || "");
     meta  = data.previousPct != null
-      ? `${data.previousPct}% → ${data.percentage}%`
-      : data.percentageDisplay ? `Obtained: ${esc(data.percentageDisplay)}` : "";
+      ? data.previousPct + "% \u2192 " + data.percentage + "%"
+      : data.percentageDisplay ? "Obtained: " + esc(data.percentageDisplay) : "";
   }
 
-  // Unread dot indicator
-  const unreadDot = !isRead
-    ? `<span class="unread-dot" title="Unread"></span>`
-    : "";
+  const unreadDot = !isRead ? '<span class="unread-dot" title="Unread"></span>' : "";
 
-  return `<div class="item ${type}${isRead?" item-read":""}">
-    <div class="item-course">${unreadDot}${headerLine}</div>
-    <div class="item-title">${title || "—"}</div>
-    ${meta ? `<div class="item-meta">${meta}</div>` : ""}
-    ${extraHTML}
-  </div>`;
+  return '<div class="item ' + type + (isRead?" item-read":"") + '">'
+    + '<div class="item-course">' + unreadDot + headerLine + '</div>'
+    + '<div class="item-title">' + (title || "\u2014") + '</div>'
+    + (meta ? '<div class="item-meta">' + meta + '</div>' : "")
+    + extraHTML
+    + '</div>';
 }
 
+// Read state helpers
 function doMarkRead(id) {
   if (state.readIds[id]) return;
   state.readIds[id] = true;
   chrome.runtime.sendMessage({ action: "MARK_READ", ids: [id] });
-  // Re-render after a moment so unread count updates
   setTimeout(() => render(), 300);
 }
 
@@ -318,7 +302,6 @@ function doMarkReadBulk(ids) {
 }
 
 function onMarkAllRead() {
-  // Collect all currently visible unread IDs
   const allItems = [
     ...(state.announcements||[]),
     ...(state.outlines     ||[]),
@@ -331,7 +314,7 @@ function onMarkAllRead() {
   doMarkReadBulk(unreadIds);
 }
 
-// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Filter / navigation ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+// Filter / navigation
 function typeToLabel(type) {
   return {ann:"Course News",out:"Course Outline",mat:"Course Material",sub:"Course Submission",grd:"Course Grade Book"}[type]||"Update";
 }
@@ -345,7 +328,7 @@ function setFilter(f) {
   renderList(f);
 }
 
-// ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Actions ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+// Actions
 function onClearClick() {
   chrome.runtime.sendMessage({ action: "CLEAR_UPDATES" }, () => {
     state = { announcements:[],outlines:[],materials:[],submissions:[],grades:[],lastScanned:null,readIds:{} };
@@ -356,20 +339,28 @@ function onClearClick() {
 }
 
 async function onScanClick() {
-  const btn = document.getElementById("scanBtn");
-  const st  = document.getElementById("statusText");
+  const btn  = document.getElementById("scanBtn");
+  const st   = document.getElementById("statusText");
   const tabs = await chrome.tabs.query({ url: "https://horizon.ucp.edu.pk/student/course/*/*" });
   if (!tabs.length) {
-    st.textContent = "ÃƒÂ¢Ã…Â¡Ã‚Â  Open a course page first";
-    document.getElementById("list").innerHTML = `<div class="empty">
-      <div class="empty-icon">ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â</div><div class="empty-text">No course page open</div>
-      <div class="empty-sub">Open any course tab on <strong>horizon.ucp.edu.pk</strong>, then scan</div></div>`;
+    st.textContent = "\u26A0 Open a course page first";
+    document.getElementById("list").innerHTML = '<div class="empty">'
+      + '<div class="empty-icon">\u26A0\uFE0F</div>'
+      + '<div class="empty-text">No course page open</div>'
+      + '<div class="empty-sub">Open any course tab on <strong>horizon.ucp.edu.pk</strong>, then scan</div>'
+      + '</div>';
     return;
   }
-  btn.classList.add("scanning"); btn.textContent = "ScanningÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦";
-  st.textContent = `Scanning ${tabs.length} course(s)ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦`;
+  btn.classList.add("scanning");
+  btn.textContent = "Scanning\u2026";
+  st.textContent = "Scanning " + tabs.length + " course(s)\u2026";
   chrome.runtime.sendMessage({ action: "TRIGGER_BG_SCAN" }, () => {
-    setTimeout(() => { loadData(); btn.classList.remove("scanning"); btn.textContent = "ÃƒÂ¢Ã¢â‚¬Â Ã‚Â» Scan Now"; st.textContent = "Monitoring active"; }, 6000);
+    setTimeout(() => {
+      loadData();
+      btn.classList.remove("scanning");
+      btn.textContent = "\u21BB Scan Now";
+      st.textContent = "Monitoring active";
+    }, 6000);
   });
 }
 
@@ -377,19 +368,20 @@ async function onScanAllClick() {
   const btn   = document.getElementById("scanAllBtn");
   const label = btn.querySelector(".scan-all-label");
   const st    = document.getElementById("statusText");
-  btn.classList.add("scanning"); label.textContent = "ScanningÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦";
-  st.textContent = "Sending scan request to dashboardÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦";
+  btn.classList.add("scanning");
+  label.textContent = "Scanning\u2026";
+  st.textContent = "Sending scan request to dashboard\u2026";
   const tabs = await chrome.tabs.query({ url: "https://horizon.ucp.edu.pk/*" });
   if (!tabs.length) {
-    st.textContent = "ÃƒÂ¢Ã…Â¡Ã‚Â  Open Horizon portal in a tab first";
+    st.textContent = "\u26A0 Open Horizon portal in a tab first";
     btn.classList.remove("scanning"); label.textContent = "Scan All"; return;
   }
   chrome.tabs.sendMessage(tabs[0].id, { action: "INITIATE_SCAN_ALL" }, (res) => {
     if (chrome.runtime.lastError || !res) {
-      st.textContent = "ÃƒÂ¢Ã…Â¡Ã‚Â  Navigate to the Horizon dashboard page first";
+      st.textContent = "\u26A0 Navigate to the Horizon dashboard page first";
       btn.classList.remove("scanning"); label.textContent = "Scan All"; return;
     }
-    st.textContent = `Scanning ${res.courses} coursesÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦`;
+    st.textContent = "Scanning " + res.courses + " courses\u2026";
     pollScanAllProgress(btn, label);
   });
 }
@@ -402,7 +394,7 @@ function pollScanAllProgress(btn, label) {
       const st = document.getElementById("statusText");
       if (prog.running) {
         updateScanAllProgress(prog);
-        if (st) st.textContent = `Scanning course ${prog.current} of ${prog.total}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦`;
+        if (st) st.textContent = "Scanning course " + prog.current + " of " + prog.total + "\u2026";
       } else {
         clearInterval(interval);
         btn.classList.remove("scanning"); label.textContent = "Scan All";
@@ -418,12 +410,12 @@ function updateScanAllProgress(prog) {
   const container = document.getElementById("list");
   if (!container) return;
   const pct = prog.total > 0 ? Math.round((prog.current/prog.total)*100) : 0;
-  container.innerHTML = `<div class="scan-all-progress">
-    <div class="sap-title">🔍 Scanning All Courses</div>
-    <div class="sap-bar-wrap"><div class="sap-bar" style="width:${pct}%"></div></div>
-    <div class="sap-info">${esc(prog.currentCourse||"Initializing…")}</div>
-    <div class="sap-count">${prog.current} / ${prog.total} courses scanned</div>
-  </div>`;
+  container.innerHTML = '<div class="scan-all-progress">'
+    + '<div class="sap-title">\uD83D\uDD0D Scanning All Courses</div>'
+    + '<div class="sap-bar-wrap"><div class="sap-bar" style="width:' + pct + '%"></div></div>'
+    + '<div class="sap-info">' + esc(prog.currentCourse||"Initializing\u2026") + '</div>'
+    + '<div class="sap-count">' + prog.current + ' / ' + prog.total + ' courses scanned</div>'
+    + '</div>';
 }
 
 function showScanAllSummary(summary) {
@@ -432,25 +424,35 @@ function showScanAllSummary(summary) {
   const rows = summary.map(item => {
     const hasUpdates = item.announcements>0||item.outlines>0||item.materials>0||item.submissions>0||item.grades>0;
     const badges = [];
-    if (item.announcements>0) badges.push(`<span class="sum-badge ann">${item.announcements} ann</span>`);
-    if (item.outlines>0)      badges.push(`<span class="sum-badge out">${item.outlines} out</span>`);
-    if (item.materials>0)     badges.push(`<span class="sum-badge mat">${item.materials} mat</span>`);
-    if (item.submissions>0)   badges.push(`<span class="sum-badge sub">${item.submissions} sub</span>`);
-    if (item.grades>0)        badges.push(`<span class="sum-badge grd">${item.grades} grd</span>`);
-    return `<div class="sum-row ${hasUpdates?"has-updates":"no-updates"}">
-      <div class="sum-name">${esc(item.courseName)}</div>
-      <div class="sum-badges">${hasUpdates?badges.join(""):'<span class="sum-none">No new updates</span>'}</div>
-    </div>`;
+    if (item.announcements>0) badges.push('<span class="sum-badge ann">' + item.announcements + ' ann</span>');
+    if (item.outlines>0)      badges.push('<span class="sum-badge out">' + item.outlines      + ' out</span>');
+    if (item.materials>0)     badges.push('<span class="sum-badge mat">' + item.materials     + ' mat</span>');
+    if (item.submissions>0)   badges.push('<span class="sum-badge sub">' + item.submissions   + ' sub</span>');
+    if (item.grades>0)        badges.push('<span class="sum-badge grd">' + item.grades        + ' grd</span>');
+    return '<div class="sum-row ' + (hasUpdates?"has-updates":"no-updates") + '">'
+      + '<div class="sum-name">' + esc(item.courseName) + '</div>'
+      + '<div class="sum-badges">' + (hasUpdates ? badges.join("") : '<span class="sum-none">No new updates</span>') + '</div>'
+      + '</div>';
   }).join("");
-  container.innerHTML = `<div class="scan-all-summary">
-    <div class="sas-header">
-      <span>📊 ${summary.length} courses scanned</span>
-      <button class="sas-dismiss" id="sasDismiss">View Updates</button>
-    </div>${rows}</div>`;
+  container.innerHTML = '<div class="scan-all-summary">'
+    + '<div class="sas-header">'
+    + '<span>\uD83D\uDCCA ' + summary.length + ' courses scanned</span>'
+    + '<button class="sas-dismiss" id="sasDismiss">View Updates</button>'
+    + '</div>' + rows + '</div>';
   document.getElementById("sasDismiss")?.addEventListener("click", () => {
     chrome.storage.local.remove("hz_scan_all_progress");
     renderList(activeFilter);
   });
+}
+
+// Utilities
+function safePortalUrl(raw) {
+  try {
+    if (!raw) return "";
+    const u = new URL(raw, location.origin);
+    if (!u.hostname.includes("horizon.ucp.edu.pk") && u.origin !== location.origin) return "";
+    return u.href;
+  } catch { return ""; }
 }
 
 function esc(s) {
