@@ -1,9 +1,9 @@
-﻿# UCP Horizon Assistant User Guide
+﻿# UCP Horizon Notifier User Guide
 
 ## 1. Introduction
 
 ### What This Application Is
-- UCP Horizon Assistant is a browser extension for the UCP Horizon student portal.
+- Horizon Notifier is a browser extension for the UCP Horizon student portal.
 - It helps students track course updates in one place.
 
 ### Who It Is For
@@ -45,7 +45,7 @@
 
 ### How to Access the Application
 - Open Google Chrome
-- Install or load the UCP Horizon Assistant extension
+- Install or load the Horizon Notifier extension
 - Log in to `https://horizon.ucp.edu.pk`
 - Open the UCP Horizon dashboard
 
@@ -226,7 +226,7 @@
 
 ## 10. Conclusion
 
-- UCP Horizon Assistant helps you monitor course activity faster and more clearly
+- Horizon Notifier helps you monitor course activity faster and more clearly
 - It is best used from the Horizon dashboard after login
 - Use the popup for quick checks and the dashboard panel for detailed review
 

@@ -179,7 +179,7 @@
       const style = document.createElement("style");
       style.id = "hz-styles";
       style.textContent = `
-        /* -- Horizon Assistant - Native Portal Theme -------------------------
+        /* -- Horizon Notifier - Native Portal Theme -------------------------
            Matches UCP portal: Roboto/sans-serif, Bootstrap 5 palette, #004878 navy */
 
         #hz-dashboard-toolbar {
