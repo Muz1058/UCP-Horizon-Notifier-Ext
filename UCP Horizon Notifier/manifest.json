@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "UCP Horizon Notifier",
+  "name": "Horizon Notifier",
   "version": "4.1.0",
   "description": "Monitors your UCP Horizon student portal for new announcements, materials, submissions, and grade updates.",
   "permissions": [
