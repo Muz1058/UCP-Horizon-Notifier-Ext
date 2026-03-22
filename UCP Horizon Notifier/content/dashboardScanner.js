@@ -1,6 +1,7 @@
-// content/dashboardScanner.js - v16 production
+// content/dashboardScanner.js - v17 production
 // Dashboard "Scan All Courses" + in-page Updates Panel with read/unread tracking.
 // Single source of truth: syncUnreadCount() keeps toolbar badge + panel header in sync.
+// v17: Multi-user support — detects registration number change and clears stale data.
 
 (function () {
   "use strict";
@@ -8,7 +9,7 @@
   const PANEL_ID      = "hz-updates-panel";
   let   _panelShowAll  = false;
   let   _unreadCount   = 0;
-  let   _syncDebounce  = null;   // debounce for storage.onChanged ? syncUnreadCount
+  let   _syncDebounce  = null;   // debounce for storage.onChanged → syncUnreadCount
   let   _lastCourseCount = "";   // set after scan, used by syncUnreadCount for status text
   let   _statusHideTimer = null; // hides transient completion status
 
@@ -17,6 +18,64 @@
     const path = window.location.pathname.toLowerCase();
     return path.includes("/student/dashboard") || path.includes("/student/home") ||
            path === "/student/" || path === "/student";
+  }
+
+  // ── User identity tracking ────────────────────────────────────────────────
+  // Reads the student registration number from the dashboard DOM.
+  // The DOM structure is:
+  //   <h2 class="heading_b">
+  //     <span class="uk-text-truncate">Name</span>
+  //     <span class="sub-heading">L1F23BSSE0395</span>   ← first .sub-heading = reg no.
+  //     ...
+  //   </h2>
+  function getCurrentRegNo() {
+    const h2 = document.querySelector("h2.heading_b");
+    if (!h2) return null;
+    const subHeading = h2.querySelector(".sub-heading");
+    if (!subHeading) return null;
+    const text = subHeading.textContent.trim();
+    // Sanity check: registration numbers are non-empty and reasonably short
+    return text.length > 0 && text.length < 50 ? text : null;
+  }
+
+  // Check stored reg no vs current. If different user, clear ALL stored data
+  // and update the stored reg no. Returns a promise that resolves to the reg no.
+  function checkAndHandleUserSwitch() {
+    return new Promise(resolve => {
+      const currentRegNo = getCurrentRegNo();
+      if (!currentRegNo) {
+        // Can't determine user — proceed without clearing to be safe
+        resolve(currentRegNo);
+        return;
+      }
+
+      chrome.storage.local.get("hz_current_user_reg", res => {
+        const storedRegNo = res.hz_current_user_reg || null;
+
+        if (storedRegNo && storedRegNo !== currentRegNo) {
+          // Different user detected — wipe everything
+          console.log(`[HorizonNotifier] User switch detected: ${storedRegNo} → ${currentRegNo}. Clearing data.`);
+          chrome.storage.local.remove([
+            "hz_announcements", "hz_materials", "hz_submissions",
+            "hz_grades", "hz_outlines", "hz_read_ids",
+            "hz_lastScanned", "hz_scanned_courses_session",
+            "hz_scan_all_progress", "hz_last_session_id",
+            "hz_pending_auto_scan",
+          ], () => {
+            // Store the new user's reg no
+            chrome.storage.local.set({ hz_current_user_reg: currentRegNo }, () => {
+              resolve(currentRegNo);
+            });
+          });
+        } else {
+          // Same user or first-ever run — just ensure reg no is stored
+          if (!storedRegNo) {
+            chrome.storage.local.set({ hz_current_user_reg: currentRegNo });
+          }
+          resolve(currentRegNo);
+        }
+      });
+    });
   }
 
   // -- Collect course links --------------------------------------------------
@@ -41,9 +100,9 @@
       courses.push({
         courseId, courseName: name,
         infoUrl:       `${base}/student/course/info/${courseId}`,
-      outlineUrl:    `${base}/student/course/outline/${courseId}`,
-      materialUrl:   `${base}/student/course/material/${courseId}`,
-      submissionUrl: `${base}/student/course/submission/${courseId}`,
+        outlineUrl:    `${base}/student/course/outline/${courseId}`,
+        materialUrl:   `${base}/student/course/material/${courseId}`,
+        submissionUrl: `${base}/student/course/submission/${courseId}`,
         gradeUrl:      `${base}/student/course/gradebook/${courseId}`,
       });
     });
@@ -746,9 +805,9 @@
     if (!body) return;
     const pct = total > 0 ? Math.round((current/total)*100) : 0;
     body.innerHTML = `<div class="hz-prog">
-      <div class="hz-prog-title">Scanning All Courses-</div>
+      <div class="hz-prog-title">Scanning All Courses</div>
       <div class="hz-prog-bg"><div class="hz-prog-bar" style="width:${pct}%"></div></div>
-      <div class="hz-prog-course">${esc(courseName||"Initializing-")}</div>
+      <div class="hz-prog-course">${esc(courseName||"Initializing...")}</div>
       <div class="hz-prog-count">${current} / ${total} courses</div>
     </div>`;
   }
@@ -820,21 +879,21 @@
     document.body.appendChild(btn);
   }
   function _updateToggleArrow(panelOpen) {
-  const btn  = document.getElementById("hz-toggle-arrow");
-  const icon = document.getElementById("hz-arrow-icon");
-  if (!btn || !icon) return;
+    const btn  = document.getElementById("hz-toggle-arrow");
+    const icon = document.getElementById("hz-arrow-icon");
+    if (!btn || !icon) return;
 
-  const panel = document.getElementById(PANEL_ID);
-  const width = panel?.offsetWidth || 380;
+    const panel = document.getElementById(PANEL_ID);
+    const width = panel?.offsetWidth || 380;
 
-  if (panelOpen) {
-    btn.style.right = `${width}px`;
-    icon.style.transform = "rotate(180deg)";
-  } else {
-    btn.style.right = "0";
-    icon.style.transform = "rotate(0deg)";
+    if (panelOpen) {
+      btn.style.right = `${width}px`;
+      icon.style.transform = "rotate(180deg)";
+    } else {
+      btn.style.right = "0";
+      icon.style.transform = "rotate(0deg)";
+    }
   }
-}
 
   function togglePanel() {
     const existing = document.getElementById(PANEL_ID);
@@ -863,14 +922,10 @@
     _panelShowAll = false;
     const rd = data.readIds || {};
 
-    // -- Build courseMap with name normalization --------------------------
-    // Items from different scan sources may store slightly different course
-    // names (e.g. "Advance Web Programming" vs "Advance Web Programming 8").
-    // We group by normalised key and keep the canonical (shortest clean) name.
-    const courseMap  = {};  // normKey ? { displayName, ann, out, mat, sub, grd }
+    const courseMap  = {};
     const nameClean  = s => String(s)
-      .replace(/\(.*?\)/g,"")   // strip (N) suffix
-      .replace(/\s+\d+$/,"")    // strip trailing bare numbers
+      .replace(/\(.*?\)/g,"")
+      .replace(/\s+\d+$/,"")
       .replace(/\s+/g," ")
       .trim();
     const addItems = (type, arr) => arr.forEach(item => {
@@ -879,7 +934,6 @@
       if (!courseMap[key]) {
         courseMap[key] = { displayName: nameClean(raw), ann:[], out:[], mat:[], sub:[], grd:[] };
       } else {
-        // Keep shortest clean name as canonical display name
         const existing = courseMap[key].displayName;
         const candidate = nameClean(raw);
         if (candidate.length < existing.length) courseMap[key].displayName = candidate;
@@ -889,14 +943,11 @@
     addItems("ann",data.ann); addItems("out",data.out); addItems("mat",data.mat);
     addItems("sub",data.sub); addItems("grd",data.grd);
 
-    // Build sorted list using display names
     const courseNames = Object.values(courseMap)
       .map(v => v.displayName)
       .sort((a,b)=>a.localeCompare(b));
-    // Rebuild courseMap keyed by displayName for downstream code
     const displayMap = {};
     Object.values(courseMap).forEach(v => { displayMap[v.displayName] = v; });
-    // Replace courseMap reference for renderCourseList and attachItemListeners
     Object.keys(courseMap).forEach(k => delete courseMap[k]);
     Object.entries(displayMap).forEach(([k,v]) => { courseMap[k] = v; });
     const allItems    = [...data.ann,...data.mat,...data.sub,...data.grd,...data.out];
@@ -997,11 +1048,9 @@
     panel.querySelector("#hz-panel-markall").addEventListener("click", () => {
       allItems.forEach(i => { rd[i.id] = true; });
       markReadIds(allItems.map(i => i.id));
-      // Immediately update subtitle and tab badges
       const sub = document.getElementById("hz-panel-subtitle");
       if (sub) sub.innerHTML = `<span class="hz-all-read-text">All ${total} item${total!==1?"s":""} read</span>`;
       panel.querySelectorAll(".hz-tab-cnt").forEach(b => { b.textContent="0"; b.classList.add("zero"); });
-      // Re-render body
       const f = panel.querySelector(".hz-tab.active")?.dataset.filter || "all";
       const body = document.getElementById("hz-panel-body");
       if (body) body.innerHTML = renderCourseList(courseMap, courseNames, f, rd);
@@ -1015,7 +1064,6 @@
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         newP.style.transform = "translateX(0)";
         _updateToggleArrow(true);
-        // Re-attach footer close on refreshed panel
         newP.querySelector("#hz-panel-footer-close")?.addEventListener("click", () => {
           newP.remove(); _updateToggleArrow(false);
         });
@@ -1041,7 +1089,6 @@
         if (badge) badge.textContent = "";
         const viewBtn = document.getElementById("hz-view-updates-btn");
         if (viewBtn) viewBtn.style.display = "none";
-        // Remove all course card badges immediately
         document.querySelectorAll(".hz-card-badge").forEach(b => b.remove());
       });
     });
@@ -1061,7 +1108,6 @@
       if (filter==="all"||filter==="grd") allItems=allItems.concat(d.grd.map(x=>({type:"grd",x})));
       if (filter==="all"||filter==="out") allItems=allItems.concat(d.out.map(x=>({type:"out",x})));
 
-      // Sort: newest scannedAt first; among same timestamp, unread before read
       allItems.sort((a,b)=>{
         const dateDiff = new Date(b.x.scannedAt||0) - new Date(a.x.scannedAt||0);
         if (dateDiff !== 0) return dateDiff;
@@ -1089,12 +1135,11 @@
         typeBadge("out",d.out,"Out","#e0f2fe","#075985"),
       ].filter(Boolean).join("");
 
-      
       const cid = "hz-c-" + (function(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return Math.abs(h).toString(36);
-})(name);
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+        return Math.abs(h).toString(36);
+      })(name);
       return `
         <div class="hz-cs${allRead?" all-read":""}">
           <button class="hz-ctoggle" data-target="${cid}" data-course="${esc(name)}">
@@ -1123,7 +1168,6 @@
     
     const colors  = {ann:"#ffc107",out:"#0891b2",mat:"#0d6efd",sub:"#198754",grd:"#6f42c1"};
     const labels  = {ann:"Announcement",out:"Outline",mat:"Material",sub:"Submission",grd:"Grade"};
-    // SVG icons - no emojis
     const icons   = {
       ann: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
       out: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>',
@@ -1175,7 +1219,6 @@
       meta  = x.previousPct!=null?`${x.previousPct}% -> ${x.percentage}%`:x.percentageDisplay?`Obtained: ${x.percentageDisplay}`:"";
     }
 
-    // Build navigation URL for sub/grd double-click
     const tabPaths = { ann:"info", out:"outline", mat:"material", sub:"submission", grd:"gradebook" };
     const navUrl = x.courseId
       ? `${window.location.origin}/student/course/${tabPaths[type]}/${x.courseId}`
@@ -1217,23 +1260,15 @@
         if (chev) chev.style.transform = opening?"rotate(90deg)":"";
 
         if (!opening && !_panelShowAll) {
-          // Section closing - dim all items that are now read
           target.querySelectorAll(".hz-item").forEach(el => {
             const id = el.dataset.itemId;
             if (id && rd[id]) el.classList.add("dim");
           });
         }
-
-        // Opening a course section does NOT auto-mark items as read.
-        // Read state is only set by explicit user actions:
-        //   - Announcement: clicking "View Details"
-        //   - Material: clicking the Download button
-        //   - All: clicking "All read" in the panel header
-        // (No code needed here - just expand to show items)
       };
     });
 
-    // Material/outline download click ? mark as read
+    // Material/outline download click → mark as read
     panel.querySelectorAll(".hz-dlbtn[data-itemid]").forEach(a => {
       a.addEventListener("click", () => {
         const id = a.dataset.itemid;
@@ -1243,25 +1278,20 @@
         const itemEl = a.closest(".hz-item");
         if (itemEl) {
           itemEl.querySelector(".hz-udot")?.remove();
-          // Dim on collapse - keep full opacity while visible
         }
       });
     });
 
-    // Item interactions by type:
-    //   Material/Outline ? Download button marks read (handled above); clicking card also marks read
-    //   Submission/Grade ? single click = mark read; double click = open course tab
     panel.querySelectorAll(".hz-item[data-item-id]").forEach(el => {
       const type = el.dataset.type || "";
       const isOut = type === "out";
       const isMat = type === "mat";
       const isSub = type === "sub";
       const isGrd = type === "grd";
-      if (!isOut && !isMat && !isSub && !isGrd) return; // ann handled by View Details btn
+      if (!isOut && !isMat && !isSub && !isGrd) return;
 
-      // Single-click: mark as read
       el.addEventListener("click", (e) => {
-        if ((isOut || isMat) && e.target.closest(".hz-dlbtn")) return; // download btn handled separately
+        if ((isOut || isMat) && e.target.closest(".hz-dlbtn")) return;
         const id = el.dataset.itemId;
         if (!id || rd[id]) return;
         rd[id] = true;
@@ -1272,7 +1302,6 @@
         }
       });
 
-      // Double-click: navigate to that course tab in a new tab
       if ((isSub || isGrd) && el.dataset.navUrl) {
         el.style.cursor = "pointer";
         el.addEventListener("dblclick", (e) => {
@@ -1286,34 +1315,32 @@
 
     // Announcement detail toggle
     panel.querySelectorAll(".hz-dbtn").forEach(btn => {
-  btn.onclick = () => {
-    const box     = document.getElementById(btn.dataset.iid);
-    if (!box) return;
-    const opening = box.style.display==="none" || !box.style.display;
-    box.style.display = opening ? "block" : "none";
-    btn.textContent   = opening ? "Hide" : "View Details";
-    btn.classList.toggle("open", opening);
+      btn.onclick = () => {
+        const box     = document.getElementById(btn.dataset.iid);
+        if (!box) return;
+        const opening = box.style.display==="none" || !box.style.display;
+        box.style.display = opening ? "block" : "none";
+        btn.textContent   = opening ? "Hide" : "View Details";
+        btn.classList.toggle("open", opening);
 
-    const id = btn.dataset.itemid;
-    if (!id) return;
+        const id = btn.dataset.itemid;
+        if (!id) return;
 
-    if (opening && !rd[id]) {
-      rd[id] = true;
-      markReadIds([id]);
-      btn.closest(".hz-item")?.querySelector(".hz-udot")?.remove();
-    }
+        if (opening && !rd[id]) {
+          rd[id] = true;
+          markReadIds([id]);
+          btn.closest(".hz-item")?.querySelector(".hz-udot")?.remove();
+        }
 
-    if (opening) {
-      // Always remove dim while detail box is open (covers already-read items too)
-      btn.closest(".hz-item")?.classList.remove("dim");
-    }
+        if (opening) {
+          btn.closest(".hz-item")?.classList.remove("dim");
+        }
 
-    if (!opening && rd[id] && !_panelShowAll) {
-      // Re-dim only when user closes
-      btn.closest(".hz-item")?.classList.add("dim");
-    }
-  };
-});
+        if (!opening && rd[id] && !_panelShowAll) {
+          btn.closest(".hz-item")?.classList.add("dim");
+        }
+      };
+    });
   }
 
   // -- Storage helpers -------------------------------------------------------
@@ -1329,21 +1356,15 @@
       );
     });
   }
-  function storageGet(k){ return new Promise(r=>chrome.storage.local.get(k,res=>r(res[k]||null))); }
   function storageSet(k,v){ return new Promise(r=>chrome.storage.local.set({[k]:v},r)); }
   function setProgress(d){ return storageSet("hz_scan_all_progress",d); }
 
   // -- Parsers ---------------------------------------------------------------
-  // -- Stable ID: content-based, NOT including courseName ---------------
-  // Ensures same item gets same ID regardless of scan source or name variation.
   function makeId(prefix, ...parts) {
     const s = parts.join("||"); let h = 0;
     for (let i = 0; i < s.length; i++) h = (Math.imul(31,h) + s.charCodeAt(i))|0;
     return prefix + "_" + Math.abs(h).toString(36);
   }
-
-  // All parsers return item arrays - NO direct storage writes.
-  // The caller (startScanAll/scanTab) sends a single SAVE_UPDATES per course.
 
   function parseAnnouncements(doc, cn, courseId) {
     const items = [];
@@ -1457,7 +1478,6 @@
     return items;
   }
 
-  function dedupe(arr,key){const s=new Set();return arr.filter(i=>{if(s.has(i[key]))return false;s.add(i[key]);return true;});}
   function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
   function safePortalUrl(raw, prefixes) {
     try {
@@ -1476,25 +1496,14 @@
   }
   function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 
-  // -- Boot ------------------------------------------------------------------
   // -- Course card badges + hover tooltip + click-to-filter -----------------
-  //
-  // Design goals:
-  //   - Badge sits inside .card-header right-aligned - truly inside the card
-  //   - Count = total UNREAD items for that course (same source as panel)
-  //   - Card glow when unread items exist
-  //   - Hover tooltip shows latest 2 unread titles
-  //   - Click card (when unread > 0) ? open panel filtered to that course
-  //   - All values stay consistent with View Updates badge and panel header
-
   function injectCardBadges() {
     chrome.storage.local.get(
       ["hz_announcements","hz_outlines","hz_materials","hz_submissions","hz_grades","hz_read_ids"],
       res => {
         const rd = res.hz_read_ids || {};
 
-        // -- Build per-course unread count and preview lists -------------
-        const courseData = {};  // courseName (raw) ? { count, previews:[] }
+        const courseData = {};
 
         const nameClean = s => String(s)
           .replace(/\(.*?\)/g,"")
@@ -1506,7 +1515,7 @@
           arr.forEach(item => {
             const raw = (item.courseName || "").trim();
             if (!raw) return;
-            const cn = nameClean(raw); // strip any trailing number artifacts
+            const cn = nameClean(raw);
             if (!cn) return;
             if (!courseData[cn]) courseData[cn] = { count:0, previews:[] };
             if (!rd[item.id]) {
@@ -1518,7 +1527,6 @@
           });
         };
 
-        // Sort newest-first per type so previews show latest
         const byDate = arr => [...arr].sort((a,b)=>new Date(b.scannedAt||0)-new Date(a.scannedAt||0));
         process(byDate(res.hz_announcements||[]), i=>"News: "+(i.subject||"Announcement"));
         process(byDate(res.hz_outlines     ||[]), i=>"Outline: "+(i.title||i.fileName||"Outline"));
@@ -1526,10 +1534,7 @@
         process(byDate(res.hz_submissions  ||[]), i=>"Task: "+(i.name||"Submission"));
         process(byDate(res.hz_grades       ||[]), i=>"Grade: "+(i.assessment||"Grade"));
 
-        // -- Update each course card -------------------------------------
         document.querySelectorAll('a[href*="/student/course/info/"]').forEach(anchor => {
-          // Get course name from the card header span (the actual text node)
-          // Select only the course-name span, never the badge span we injected
           const hdrSpan = anchor.querySelector(".card-header span:not(.hz-card-badge)");
           if (!hdrSpan) return;
           const courseName = hdrSpan.textContent.trim();
@@ -1539,7 +1544,6 @@
           const info  = courseData[courseName] || { count:0, previews:[] };
           const count = info.count;
 
-          // -- Badge ---------------------------------------------------
           cardHeader.style.display        = "flex";
           cardHeader.style.alignItems     = "center";
           cardHeader.style.justifyContent = "space-between";
@@ -1555,7 +1559,6 @@
             }
             if (badge.textContent !== String(count)) {
               badge.textContent = count;
-              // Re-trigger pop animation on update
               badge.style.animation = "none";
               requestAnimationFrame(() => { badge.style.animation = ""; });
             }
@@ -1563,23 +1566,15 @@
             badge.remove();
           }
 
-          // -- Card glow ------------------------------------------------
           const card = anchor.querySelector(".card");
           if (card) card.classList.toggle("hz-card-glow", count > 0);
 
-          // -- Event listeners (bind once) ------------------------------
           if (!anchor.dataset.hzBound) {
             anchor.dataset.hzBound = "1";
-
-            // Hover: show tooltip
             anchor.addEventListener("mouseenter", _showTooltip);
             anchor.addEventListener("mouseleave",  _hideTooltip);
-
-            // No click intercept - let portal navigate normally.
-            // User can open panel via "Updates" button or tooltip.
           }
 
-          // Always refresh preview data (changes after scan)
           if (info.previews.length > 0) {
             anchor.dataset.hzPreview     = info.previews.join("||");
             anchor.dataset.hzCourseName  = courseName;
@@ -1607,7 +1602,7 @@
     tip.innerHTML =
       `<div class="hz-tip-course">${esc(cn)}</div>` +
       lines.map(l=>`<div class="hz-tip-line">${esc(l)}</div>`).join("") +
-      `<div class="hz-tip-more">Click to view all updates ?</div>`;
+      `<div class="hz-tip-more">Click to view all updates →</div>`;
     document.body.appendChild(tip);
     _tooltipEl = tip;
 
@@ -1629,96 +1624,31 @@
     if (_tooltipEl) { _tooltipEl.remove(); _tooltipEl = null; }
   }
 
-  // -- Open panel filtered to a specific course -------------------------------
-  async function openPanelFilteredTo(courseName) {
-    let panel = document.getElementById(PANEL_ID);
-    if (!panel) {
-      await openPanel();
-      panel = document.getElementById(PANEL_ID);
-    }
-    if (!panel) return;
-
-    // Small delay to ensure DOM is settled after panel open animation
-    setTimeout(() => _filterPanelToCourse(panel, courseName), 80);
-  }
-
   const _nameClean = s => String(s)
     .replace(/\(.*?\)/g,"")
     .replace(/\s+\d+$/,"")
     .replace(/\s+/g," ")
     .trim();
 
-  function _filterPanelToCourse(panel, courseName) {
-    const body = document.getElementById("hz-panel-body");
-    if (!body) return;
-
-    const targetKey = normName(_nameClean(courseName));
-
-    // Find section whose data-course matches (exact, normalised, or cleaned)
-    let found = null;
-    panel.querySelectorAll(".hz-ctoggle").forEach(btn => {
-      const cn = (btn.dataset.course || "").trim();
-      if (!found && (
-        cn === courseName ||
-        normName(cn) === normName(courseName) ||
-        normName(_nameClean(cn)) === targetKey
-      )) {
-        found = btn;
-      }
-    });
-
-    if (!found) return;
-
-    // Expand the section if not already open
-    const target = document.getElementById(found.dataset.target);
-    const chev   = found.querySelector(".hz-chev");
-    if (target && (target.style.display === "none" || !target.style.display)) {
-      target.style.display = "block";
-      if (chev) chev.style.transform = "rotate(90deg)";
-
-      // Trigger mark-read for mat/sub/grd - same logic as accordion click
-      const rd = {};
-      panel.querySelectorAll('[data-item-id]').forEach(el => {
-        // read state already tracked in courseMap inside attachItemListeners
-      });
-      // Re-use the existing btn click handler
-      found.click();
-    }
-
-    // Scroll the panel body to this section
-    requestAnimationFrame(() => {
-      found.scrollIntoView({ behavior:"smooth", block:"start" });
-    });
-  }
-
-  // Normalise course name for fuzzy matching (lowercase, collapse whitespace)
+  // Normalise course name for fuzzy matching
   function normName(s) {
     return String(s).toLowerCase().replace(/\s+/g," ").trim();
   }
 
   // Called after every read-state change to keep badges in sync
   function refreshCardBadges() {
-    // Debounce slightly so rapid mark-read calls batch together
     if (refreshCardBadges._t) clearTimeout(refreshCardBadges._t);
     refreshCardBadges._t = setTimeout(injectCardBadges, 150);
   }
 
   // -- Auto scan on login -----------------------------------------------------
-  // Uses the portal's session_id cookie to detect new logins.
-  // Each distinct session_id = one scan. Same session_id = skip (already scanned).
-  // This means: log out ? log back in ? new session_id ? auto-scan runs again.
-
-  // -- Trigger auto-scan for a given sessionId ------------------------------
   function _runAutoScanForSession(sessionId) {
-    // Check setting
     chrome.storage.local.get("hz_auto_scan_on_login", res => {
       if (res.hz_auto_scan_on_login === false) return;
 
-      // Don't run if already scanning
       const scanBtn = document.getElementById("hz-scan-all-btn");
       if (scanBtn && scanBtn.disabled) return;
 
-      // Clear course dedup and save session id first
       chrome.storage.local.remove("hz_scanned_courses_session");
       chrome.storage.local.remove("hz_pending_auto_scan");
       chrome.storage.local.set({ hz_last_session_id: sessionId });
@@ -1739,14 +1669,10 @@
     });
   }
 
-  // -- Check for auto-scan on page load -------------------------------------
-  // Covers: direct navigation to dashboard, page refresh
   function _maybeAutoScan() {
     chrome.storage.local.get("hz_auto_scan_on_login", pref => {
       if (pref.hz_auto_scan_on_login === false) return;
 
-      // Check for a pending session set by the background cookie listener
-      // (handles case where login happened on a non-dashboard page)
       chrome.storage.local.get("hz_pending_auto_scan", pending => {
         if (pending.hz_pending_auto_scan) {
           _runAutoScanForSession(pending.hz_pending_auto_scan);
@@ -1769,21 +1695,25 @@
     if (!isDashboard()) return;
     const tryInject = () => {
       if (document.querySelectorAll('a[href*="/student/course/info/"]').length > 0) {
-        injectToolbar();
-        _maybeAutoScan();
+        // ── USER IDENTITY CHECK ───────────────────────────────────────────
+        // Run before injecting toolbar or scanning.
+        // If user has changed, all stale data is cleared first.
+        checkAndHandleUserSwitch().then(() => {
+          injectToolbar();
+          _maybeAutoScan();
+        });
       } else {
         setTimeout(tryInject, 600);
       }
     };
     setTimeout(tryInject, 1500);
-    // Listen for storage changes from other tabs / background so ALL counts stay live
-    // syncUnreadCount atomically updates: toolbar badge, panel header, panel tab badges, card badges
+
+    // Listen for storage changes from other tabs / background
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local") return;
       const relevant = changes.hz_read_ids || changes.hz_announcements ||
                        changes.hz_outlines || changes.hz_materials || changes.hz_submissions || changes.hz_grades;
       if (relevant) {
-        // Debounce: multiple storage writes (e.g. bulk mark-read) batch into one sync
         if (_syncDebounce) clearTimeout(_syncDebounce);
         _syncDebounce = setTimeout(syncUnreadCount, 100);
       }
@@ -1794,9 +1724,12 @@
         startScanAll();
         return true;
       }
-      // Background detected new login via cookie change ? trigger auto-scan
       if (msg.action === "TRIGGER_AUTO_SCAN" && msg.sessionId) {
-        _runAutoScanForSession(msg.sessionId);
+        // When auto-scan is triggered by background cookie listener,
+        // still run user check first in case login changed user
+        checkAndHandleUserSwitch().then(() => {
+          _runAutoScanForSession(msg.sessionId);
+        });
         send({ ok: true });
         return true;
       }
@@ -1805,6 +1738,3 @@
 
   boot();
 })();
-
-
-
